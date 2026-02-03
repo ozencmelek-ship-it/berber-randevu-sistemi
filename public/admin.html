@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Berber Paneli</title>
+    <style>
+      body { font-family: system-ui, Arial; max-width: 1100px; margin: 24px auto; padding: 0 12px; }
+      .top { display:flex; justify-content: space-between; align-items:center; gap:12px; flex-wrap: wrap; }
+      .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin: 12px 0; }
+      .muted { color:#666; font-size: 0.9rem; }
+      .row { display:flex; gap:10px; flex-wrap: wrap; align-items:center; }
+      input, select { padding: 10px 12px; border-radius: 10px; border: 1px solid #ccc; }
+      button { padding: 10px 12px; border-radius: 10px; border: 0; cursor: pointer; }
+      table { width:100%; border-collapse: collapse; }
+      th, td { padding:10px; border-bottom:1px solid #eee; text-align:left; vertical-align: middle; }
+      .actions { display:flex; gap:8px; flex-wrap: wrap; }
+      .danger { background:#ffd9dd; }
+      .primary { background:#dff0ff; }
+      .ghost { background:#f1f1f1; }
+      .ok { color:#0b6b0b; }
+      .error { color:#b00020; }
+
+      .kpi { display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+      .kpi .box { border:1px solid #eee; border-radius:12px; padding:12px; }
+      .kpi .val { font-size:22px; font-weight:700; margin-top:4px; }
+
+      .tabs { display:flex; gap:8px; flex-wrap: wrap; }
+      .tab { background:#f1f1f1; }
+      .tab.active { background:#dff0ff; font-weight:700; }
+
+      .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+      @media (max-width: 900px) { .kpi { grid-template-columns: 1fr 1fr; } .grid2{grid-template-columns:1fr;} }
+      @media (max-width: 600px) { .kpi { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+
+  <body>
+    <div class="top">
+      <div>
+        <h1 style="margin:0;">Berber Paneli</h1>
+        <div class="muted">Randevuları ve hizmetleri yönet</div>
+      </div>
+      <div class="row">
+        <a href="/" class="muted">Müşteri ekranı</a>
+        <button id="logoutBtn" class="ghost">Çıkış</button>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <!-- APPOINTMENTS -->
+      <div>
+        <div class="card">
+          <h2 style="margin-top:0;">Randevular</h2>
+
+          <div class="row" style="justify-content: space-between;">
+            <div class="row">
+              <div class="tabs" id="tabs">
+                <button class="tab active" data-mode="today">Bugün</button>
+                <button class="tab" data-mode="tomorrow">Yarın</button>
+                <button class="tab" data-mode="week">Hafta</button>
+                <button class="tab" data-mode="all">Tümü</button>
+              </div>
+
+              <input id="q" placeholder="Müşteri ara..." style="min-width:220px;" />
+              <button id="refreshBtn" class="ghost">Yenile</button>
+            </div>
+            <div class="muted" id="lastUpdate"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="kpi">
+            <div class="box">
+              <div class="muted">Randevu sayısı</div>
+              <div class="val" id="kpiCount">0</div>
+            </div>
+            <div class="box">
+              <div class="muted">İlk randevu</div>
+              <div class="val" id="kpiFirst">-</div>
+            </div>
+            <div class="box">
+              <div class="muted">Son randevu</div>
+              <div class="val" id="kpiLast">-</div>
+            </div>
+            <div class="box">
+              <div class="muted">Yoğun saat (Top 3)</div>
+              <div class="val" id="kpiBusy" style="font-size:16px; font-weight:600;">-</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Edit Appointment -->
+        <div class="card" id="editCard" style="display:none;">
+          <h3 style="margin-top:0;">Randevu Düzenle</h3>
+
+          <div class="row">
+            <div style="flex:1; min-width:200px;">
+              <div class="muted">Ad Soyad</div>
+              <input id="eName" style="width:100%;" />
+            </div>
+
+            <div style="flex:1; min-width:200px;">
+              <div class="muted">Hizmet</div>
+              <select id="eService" style="width:100%;"></select>
+            </div>
+          </div>
+
+          <div style="margin-top:10px;">
+            <div class="muted">Tarih & Saat</div>
+            <input id="eDatetime" type="datetime-local" style="width:100%;" />
+          </div>
+
+          <div class="row" style="margin-top:12px; justify-content: space-between;">
+            <div class="actions">
+              <button id="eSave" class="primary">Kaydet</button>
+              <button id="eCancel" class="ghost">İptal</button>
+            </div>
+            <div class="muted" id="eId"></div>
+          </div>
+
+          <div id="eMsg" class="muted" style="margin-top:8px;"></div>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-top:0;">Liste</h3>
+          <div id="listWrap" class="muted">Yükleniyor...</div>
+        </div>
+      </div>
+
+      <!-- SERVICES -->
+      <div>
+        <div class="card">
+          <h2 style="margin-top:0;">Hizmet Yönetimi</h2>
+
+          <div class="row">
+            <input id="sName" placeholder="Hizmet adı (örn: Saç Kesim)" style="flex:1; min-width:200px;" />
+            <input id="sPrice" type="number" placeholder="Fiyat (₺)" style="width:140px;" />
+            <input id="sDur" type="number" placeholder="Süre (dk)" style="width:140px;" />
+            <button id="sAddBtn" class="primary">Ekle</button>
+          </div>
+
+          <div id="sMsg" class="muted" style="margin-top:8px;"></div>
+        </div>
+
+        <!-- Edit Service -->
+        <div class="card" id="sEditCard" style="display:none;">
+          <h3 style="margin-top:0;">Hizmet Düzenle</h3>
+          <div class="row">
+            <input id="seName" placeholder="Ad" style="flex:1; min-width:200px;" />
+            <input id="sePrice" type="number" placeholder="Fiyat" style="width:140px;" />
+            <input id="seDur" type="number" placeholder="Süre (dk)" style="width:140px;" />
+          </div>
+          <div class="row" style="margin-top:10px; justify-content: space-between;">
+            <div class="actions">
+              <button id="sSaveBtn" class="primary">Kaydet</button>
+              <button id="sCancelBtn" class="ghost">İptal</button>
+              <button id="sDisableBtn" class="danger">Pasif Et</button>
+            </div>
+            <div class="muted" id="seId"></div>
+          </div>
+          <div id="seMsg" class="muted" style="margin-top:8px;"></div>
+        </div>
+
+        <div class="card">
+          <div class="row" style="justify-content: space-between;">
+            <h3 style="margin:0;">Hizmetler</h3>
+            <button id="sRefreshBtn" class="ghost">Yenile</button>
+          </div>
+          <div id="servicesWrap" class="muted" style="margin-top:10px;">Yükleniyor...</div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      /* -------------------- Shared helpers -------------------- */
+      function getId(doc) { return doc?._id || doc?.id; }
+
+      function fmtLocal(dt) {
+        const d = new Date(dt);
+        const pad = (n) => String(n).padStart(2, "0");
+        return (
+          d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+          " " + pad(d.getHours()) + ":" + pad(d.getMinutes())
+        );
+      }
+
+      function toDatetimeLocalValue(dt) {
+        const d = new Date(dt);
+        const pad = (n) => String(n).padStart(2, "0");
+        return (
+          d.getFullYear() +
+          "-" + pad(d.getMonth() + 1) +
+          "-" + pad(d.getDate()) +
+          "T" + pad(d.getHours()) +
+          ":" + pad(d.getMinutes())
+        );
+      }
+
+      function escapeHtml(str) {
+        return String(str ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      /* -------------------- Logout -------------------- */
+      document.getElementById("logoutBtn").addEventListener("click", async () => {
+        await fetch("/auth/logout", { method: "POST" });
+        window.location.href = "/login.html";
+      });
+
+      /* -------------------- SERVICES -------------------- */
+      const servicesWrap = document.getElementById("servicesWrap");
+      const sMsg = document.getElementById("sMsg");
+
+      const sName = document.getElementById("sName");
+      const sPrice = document.getElementById("sPrice");
+      const sDur = document.getElementById("sDur");
+      const sAddBtn = document.getElementById("sAddBtn");
+      const sRefreshBtn = document.getElementById("sRefreshBtn");
+
+      // edit service
+      const sEditCard = document.getElementById("sEditCard");
+      const seName = document.getElementById("seName");
+      const sePrice = document.getElementById("sePrice");
+      const seDur = document.getElementById("seDur");
+      const seId = document.getElementById("seId");
+      const seMsg = document.getElementById("seMsg");
+      const sSaveBtn = document.getElementById("sSaveBtn");
+      const sCancelBtn = document.getElementById("sCancelBtn");
+      const sDisableBtn = document.getElementById("sDisableBtn");
+
+      let serviceCache = []; // aktif hizmetler (müşteri select için)
+      let currentServiceId = null;
+
+      function setSMsg(text, ok=true) {
+        sMsg.textContent = text;
+        sMsg.className = ok ? "muted ok" : "muted error";
+      }
+      function setSEMsg(text, ok=true) {
+        seMsg.textContent = text;
+        seMsg.className = ok ? "muted ok" : "muted error";
+      }
+
+      function openServiceEdit(s) {
+        currentServiceId = getId(s);
+        sEditCard.style.display = "block";
+        seId.textContent = "ID: " + currentServiceId;
+        seName.value = s.name || "";
+        sePrice.value = s.price ?? "";
+        seDur.value = s.durationMin ?? "";
+        setSEMsg("");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+      function closeServiceEdit() {
+        currentServiceId = null;
+        sEditCard.style.display = "none";
+      }
+
+      sCancelBtn.addEventListener("click", closeServiceEdit);
+
+      sAddBtn.addEventListener("click", async () => {
+        const name = sName.value.trim();
+        const price = Number(sPrice.value);
+        const durationMin = Number(sDur.value);
+
+        if (!name) return setSMsg("Hizmet adı zorunlu.", false);
+        if (!Number.isFinite(price) || price < 0) return setSMsg("Fiyat geçersiz.", false);
+        if (!Number.isFinite(durationMin) || durationMin < 5) return setSMsg("Süre geçersiz (min 5 dk).", false);
+
+        const res = await fetch("/services", {
+          method: "POST",
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+          body: JSON.stringify({ name, price, durationMin }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return setSMsg(data?.error || "Hizmet eklenemedi.", false);
+
+        setSMsg("Hizmet eklendi ✅", true);
+        sName.value = ""; sPrice.value = ""; sDur.value = "";
+        await renderServices();
+        await refreshServiceSelects();
+      });
+
+      sSaveBtn.addEventListener("click", async () => {
+        if (!currentServiceId) return;
+
+        const name = seName.value.trim();
+        const price = Number(sePrice.value);
+        const durationMin = Number(seDur.value);
+
+        if (!name) return setSEMsg("Ad zorunlu.", false);
+        if (!Number.isFinite(price) || price < 0) return setSEMsg("Fiyat geçersiz.", false);
+        if (!Number.isFinite(durationMin) || durationMin < 5) return setSEMsg("Süre geçersiz.", false);
+
+        const res = await fetch(`/services/${currentServiceId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+          body: JSON.stringify({ name, price, durationMin }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return setSEMsg(data?.error || "Güncelleme başarısız.", false);
+
+        setSEMsg("Kaydedildi ✅", true);
+        await renderServices();
+        await refreshServiceSelects();
+      });
+
+      sDisableBtn.addEventListener("click", async () => {
+        if (!currentServiceId) return;
+        const ok = confirm("Bu hizmeti pasif etmek istiyor musun?");
+        if (!ok) return;
+
+        const res = await fetch(`/services/${currentServiceId}`, { method: "DELETE" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return setSEMsg(data?.error || "Pasif etme başarısız.", false);
+
+        setSEMsg("Hizmet pasif edildi ✅", true);
+        closeServiceEdit();
+        await renderServices();
+        await refreshServiceSelects();
+      });
+
+      sRefreshBtn.addEventListener("click", async () => {
+        await renderServices();
+        await refreshServiceSelects();
+      });
+
+      async function fetchServicesAll() {
+        const res = await fetch("/services/all");
+        if (!res.ok) {
+          // session düşerse
+          if (res.status === 401) window.location.href = "/login.html";
+          return [];
+        }
+        const data = await res.json();
+        return Array.isArray(data) ? data : [];
+      }
+
+      async function fetchServicesActive() {
+        const res = await fetch("/services");
+        const data = await res.json().catch(() => []);
+        return Array.isArray(data) ? data : [];
+      }
+
+      async function renderServices() {
+        servicesWrap.textContent = "Yükleniyor...";
+        const all = await fetchServicesAll();
+        if (!all.length) {
+          servicesWrap.innerHTML = "<div class='muted'>Henüz hizmet yok.</div>";
+          return;
+        }
+
+        const rows = all.map(s => {
+          const id = getId(s);
+          const active = s.isActive !== false;
+          return `<tr>
+            <td>${escapeHtml(s.name)}</td>
+            <td>${Number(s.price).toFixed(0)} ₺</td>
+            <td>${s.durationMin} dk</td>
+            <td class="muted">${active ? "Aktif" : "Pasif"}</td>
+            <td class="muted">${id}</td>
+            <td>
+              <div class="actions">
+                <button class="primary" data-sedit="${id}" data-s="${encodeURIComponent(JSON.stringify(s))}">Düzenle</button>
+              </div>
+            </td>
+          </tr>`;
+        }).join("");
+
+        servicesWrap.innerHTML = `
+          <table>
+            <thead>
+              <tr><th>Ad</th><th>Fiyat</th><th>Süre</th><th>Durum</th><th>ID</th><th></th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        `;
+      }
+
+      // click delegation for service edit buttons
+      servicesWrap.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-sedit]");
+        if (!btn) return;
+        const s = JSON.parse(decodeURIComponent(btn.dataset.s));
+        openServiceEdit(s);
+      });
+
+      // update appointment edit select options
+      async function refreshServiceSelects() {
+        serviceCache = await fetchServicesActive();
+        const sel = document.getElementById("eService");
+        if (!sel) return;
+
+        const current = sel.value;
+        sel.innerHTML = serviceCache.map(s => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)} — ${Number(s.price).toFixed(0)} ₺ (${s.durationMin} dk)</option>`).join("");
+        // mümkünse eski seçimi koru
+        if (current) sel.value = current;
+      }
+
+      /* -------------------- APPOINTMENTS -------------------- */
+      const listWrap = document.getElementById("listWrap");
+      const lastUpdateEl = document.getElementById("lastUpdate");
+      const qEl = document.getElementById("q");
+
+      const kpiCount = document.getElementById("kpiCount");
+      const kpiFirst = document.getElementById("kpiFirst");
+      const kpiLast = document.getElementById("kpiLast");
+      const kpiBusy = document.getElementById("kpiBusy");
+
+      // Edit appointment
+      const editCard = document.getElementById("editCard");
+      const eName = document.getElementById("eName");
+      const eService = document.getElementById("eService");
+      const eDatetime = document.getElementById("eDatetime");
+      const eSave = document.getElementById("eSave");
+      const eCancel = document.getElementById("eCancel");
+      const eId = document.getElementById("eId");
+      const eMsg = document.getElementById("eMsg");
+      let currentEditId = null;
+
+      let mode = "today";
+
+      function startOfDay(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
+      function endOfDay(d) { const x = new Date(d); x.setHours(23,59,59,999); return x; }
+
+      function startOfWeek(d) {
+        const x = startOfDay(d);
+        const day = x.getDay();
+        const diff = (day === 0 ? -6 : 1) - day; // monday start
+        x.setDate(x.getDate() + diff);
+        return x;
+      }
+      function endOfWeek(d) {
+        const s = startOfWeek(d);
+        const e = new Date(s);
+        e.setDate(e.getDate() + 6);
+        return endOfDay(e);
+      }
+
+      function applyMode(items, mode) {
+        if (mode === "all") return items;
+
+        const now = new Date();
+        if (mode === "today" || mode === "tomorrow") {
+          const base = startOfDay(now);
+          const day = mode === "today" ? base : new Date(base.getTime() + 24*60*60*1000);
+          const from = startOfDay(day);
+          const to = endOfDay(day);
+          return items.filter(a => {
+            const dt = new Date(a.datetime);
+            return dt >= from && dt <= to;
+          });
+        }
+        const from = startOfWeek(now);
+        const to = endOfWeek(now);
+        return items.filter(a => {
+          const dt = new Date(a.datetime);
+          return dt >= from && dt <= to;
+        });
+      }
+
+      function applySearch(items, q) {
+        const s = (q || "").trim().toLowerCase();
+        if (!s) return items;
+        return items.filter(a => String(a.customerName || "").toLowerCase().includes(s));
+      }
+
+      function computeBusyHours(items) {
+        const map = new Map();
+        for (const a of items) {
+          const d = new Date(a.datetime);
+          const h = d.getHours();
+          map.set(h, (map.get(h) || 0) + 1);
+        }
+        const arr = [...map.entries()].sort((a,b) => b[1] - a[1]).slice(0,3);
+        if (arr.length === 0) return "-";
+        return arr.map(([h,c]) => `${String(h).padStart(2,"0")}:00 (${c})`).join(", ");
+      }
+
+      function updateKpis(items) {
+        kpiCount.textContent = String(items.length);
+        if (items.length === 0) {
+          kpiFirst.textContent = "-";
+          kpiLast.textContent = "-";
+          kpiBusy.textContent = "-";
+          return;
+        }
+        const sorted = [...items].sort((a,b) => new Date(a.datetime) - new Date(b.datetime));
+        kpiFirst.textContent = fmtLocal(sorted[0].datetime);
+        kpiLast.textContent = fmtLocal(sorted[sorted.length - 1].datetime);
+        kpiBusy.textContent = computeBusyHours(items);
+      }
+
+      async function fetchAppointments() {
+        const res = await fetch("/appointments");
+        const data = await res.json().catch(() => []);
+        return Array.isArray(data) ? data : [];
+      }
+
+      function openEdit(id, a) {
+        currentEditId = id;
+        editCard.style.display = "block";
+        eId.textContent = "ID: " + id;
+
+        eName.value = a.customerName || "";
+        eService.value = a.service || "";
+        eDatetime.value = toDatetimeLocalValue(a.datetime);
+
+        eMsg.textContent = "";
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+
+      function closeEdit() {
+        currentEditId = null;
+        editCard.style.display = "none";
+      }
+
+      eCancel.addEventListener("click", closeEdit);
+
+      eSave.addEventListener("click", async () => {
+        if (!currentEditId) return;
+
+        const customerName = eName.value.trim();
+        const service = eService.value;
+        const dtLocal = eDatetime.value;
+
+        if (!customerName || !dtLocal) {
+          eMsg.textContent = "Ad Soyad ve Tarih/Saat zorunlu.";
+          eMsg.className = "muted error";
+          return;
+        }
+
+        const datetime = new Date(dtLocal).toISOString();
+
+        const res = await fetch(`/appointments/${currentEditId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+          body: JSON.stringify({ customerName, service, datetime }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          eMsg.textContent = data?.error || "Güncelleme başarısız.";
+          eMsg.className = "muted error";
+          return;
+        }
+
+        eMsg.textContent = "Kaydedildi ✅";
+        eMsg.className = "muted ok";
+        closeEdit();
+        await renderAppointments();
+      });
+
+      async function deleteAppointment(id) {
+        const ok = confirm("Randevuyu silmek istiyor musun?");
+        if (!ok) return;
+
+        const res = await fetch(`/appointments/${id}`, { method: "DELETE" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alert(data?.error || "Silme başarısız.");
+          return;
+        }
+
+        if (currentEditId === id) closeEdit();
+        await renderAppointments();
+      }
+
+      async function renderAppointments() {
+        listWrap.textContent = "Yükleniyor...";
+
+        const all = await fetchAppointments();
+        const filtered = applySearch(applyMode(all, mode), qEl.value).sort(
+          (a,b) => new Date(a.datetime) - new Date(b.datetime)
+        );
+
+        updateKpis(filtered);
+        lastUpdateEl.textContent = "Son güncelleme: " + new Date().toLocaleString("tr-TR");
+
+        if (filtered.length === 0) {
+          listWrap.innerHTML = "<p class='muted'>Bu görünümde randevu yok.</p>";
+          return;
+        }
+
+        const rows = filtered.map(a => {
+          const id = getId(a);
+          const packed = encodeURIComponent(JSON.stringify(a));
+          return `<tr>
+            <td>${fmtLocal(a.datetime)}</td>
+            <td>${escapeHtml(a.customerName)}</td>
+            <td>${escapeHtml(a.service)}</td>
+            <td class="muted">${id}</td>
+            <td>
+              <div class="actions">
+                <button class="primary" data-edit="${id}" data-a="${packed}">Düzenle</button>
+                <button class="danger" data-del="${id}">Sil</button>
+              </div>
+            </td>
+          </tr>`;
+        }).join("");
+
+        listWrap.innerHTML = `
+          <table>
+            <thead>
+              <tr><th>Tarih/Saat</th><th>Müşteri</th><th>Hizmet</th><th>ID</th><th></th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        `;
+      }
+
+      // click delegation for appointments
+      listWrap.addEventListener("click", (e) => {
+        const delBtn = e.target.closest("button[data-del]");
+        if (delBtn) return deleteAppointment(delBtn.dataset.del);
+
+        const editBtn = e.target.closest("button[data-edit]");
+        if (editBtn) {
+          const id = editBtn.dataset.edit;
+          const a = JSON.parse(decodeURIComponent(editBtn.dataset.a));
+          return openEdit(id, a);
+        }
+      });
+
+      // tabs
+      document.getElementById("tabs").addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-mode]");
+        if (!btn) return;
+
+        mode = btn.dataset.mode;
+
+        document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+
+        renderAppointments();
+      });
+
+      document.getElementById("refreshBtn").addEventListener("click", renderAppointments);
+
+      // search: debounce
+      let t = null;
+      qEl.addEventListener("input", () => {
+        clearTimeout(t);
+        t = setTimeout(renderAppointments, 200);
+      });
+
+      /* -------------------- Init -------------------- */
+      (async function init() {
+        await renderServices();
+        await refreshServiceSelects();
+        await renderAppointments();
+      })();
+    </script>
+  </body>
+</html>

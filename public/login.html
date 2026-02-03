@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Giriş</title>
+    <style>
+      body { font-family: system-ui, Arial; max-width: 500px; margin: 40px auto; padding: 0 12px; }
+      .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; }
+      label { display:block; margin-top:10px; font-weight:600; }
+      input { width:100%; padding:10px; margin-top:6px; border-radius:10px; border:1px solid #ccc; }
+      button { margin-top:14px; padding:10px 14px; border:0; border-radius:10px; cursor:pointer; background:#dff0ff; }
+      .msg { margin-top:10px; }
+      .error { color:#b00020; }
+    </style>
+  </head>
+  <body>
+    <h1>Admin Giriş</h1>
+    <div class="card">
+      <label>Kullanıcı</label>
+      <input id="u" value="admin" />
+      <label>Şifre</label>
+      <input id="p" type="password" />
+      <button id="btn">Giriş</button>
+      <div id="msg" class="msg error"></div>
+    </div>
+
+    <script>
+      const msg = document.getElementById("msg");
+      document.getElementById("btn").addEventListener("click", async () => {
+        msg.textContent = "";
+        const username = document.getElementById("u").value.trim();
+        const password = document.getElementById("p").value;
+
+        const res = await fetch("/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+          body: JSON.stringify({ username, password }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          msg.textContent = data?.error || "Giriş başarısız.";
+          return;
+        }
+
+        window.location.href = "/admin";
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Berber Randevu</title>
+    <style>
+      body { font-family: system-ui, Arial; max-width: 900px; margin: 24px auto; padding: 0 12px; }
+      h1 { margin-bottom: 8px; }
+      .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin: 12px 0; }
+      label { display: block; margin-top: 10px; font-weight: 600; }
+      input, select { width: 100%; padding: 10px; margin-top: 6px; border-radius: 10px; border: 1px solid #ccc; }
+      button { padding: 10px 14px; border: 0; border-radius: 10px; cursor: pointer; }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .msg { margin-top: 10px; }
+      .error { color: #b00020; }
+      .ok { color: #0b6b0b; }
+      .muted { color: #666; font-size: 0.9rem; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { padding: 10px; border-bottom: 1px solid #eee; text-align: left; vertical-align: middle; }
+      .actions { display: flex; gap: 8px; }
+      .danger { background: #ffd9dd; }
+      .primary { background: #dff0ff; }
+      .ghost { background: #f1f1f1; }
+      .toolbar { display:flex; gap:10px; align-items:center; flex-wrap: wrap; }
+      @media (max-width: 700px) { .row { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+
+  <body>
+    <h1>Berber Randevu</h1>
+    <p class="muted">Randevu oluştur, düzenle ve sil.</p>
+
+    <div class="card">
+      <h2 id="formTitle">Yeni Randevu</h2>
+
+      <div class="row">
+        <div>
+          <label for="customerName">Ad Soyad</label>
+          <input id="customerName" placeholder="Örn: Melek Yılmaz" />
+        </div>
+
+        <div>
+          <label for="service">Hizmet</label>
+          <select id="service">
+            <option value="Saç Kesim">Saç Kesim</option>
+            <option value="Sakal Tıraşı">Sakal Tıraşı</option>
+            <option value="Saç + Sakal">Saç + Sakal</option>
+          </select>
+        </div>
+      </div>
+
+      <label for="datetime">Tarih & Saat</label>
+      <input id="datetime" type="datetime-local" />
+
+      <div class="toolbar" style="margin-top:14px;">
+        <button id="saveBtn" class="primary">Randevu Oluştur</button>
+        <button id="cancelEditBtn" class="ghost" style="display:none;">İptal</button>
+      </div>
+
+      <div id="msg" class="msg"></div>
+      <div id="editingHint" class="muted" style="margin-top:6px; display:none;"></div>
+    </div>
+
+    <div class="card">
+      <div class="toolbar">
+        <h2 style="margin:0;">Randevular</h2>
+        <button id="refreshBtn">Yenile</button>
+      </div>
+      <div id="listWrap" style="margin-top:12px;"></div>
+    </div>
+
+    <script>
+      const msgEl = document.getElementById("msg");
+      const listWrap = document.getElementById("listWrap");
+      const formTitle = document.getElementById("formTitle");
+      const editingHint = document.getElementById("editingHint");
+
+      const nameEl = document.getElementById("customerName");
+      const serviceEl = document.getElementById("service");
+      const dtEl = document.getElementById("datetime");
+
+      const saveBtn = document.getElementById("saveBtn");
+      const cancelEditBtn = document.getElementById("cancelEditBtn");
+
+      let editId = null; // null ise create, doluysa update
+
+      function showMsg(text, type) {
+        msgEl.textContent = text;
+        msgEl.className = "msg " + (type === "ok" ? "ok" : "error");
+      }
+
+      function clearMsg() {
+        msgEl.textContent = "";
+        msgEl.className = "msg";
+      }
+
+      function fmtLocal(dt) {
+        const d = new Date(dt);
+        const pad = (n) => String(n).padStart(2, "0");
+        return (
+          d.getFullYear() +
+          "-" + pad(d.getMonth() + 1) +
+          "-" + pad(d.getDate()) +
+          " " + pad(d.getHours()) +
+          ":" + pad(d.getMinutes())
+        );
+      }
+
+      function toDatetimeLocalValue(dt) {
+        // datetime-local expects "YYYY-MM-DDTHH:mm"
+        const d = new Date(dt);
+        const pad = (n) => String(n).padStart(2, "0");
+        return (
+          d.getFullYear() +
+          "-" + pad(d.getMonth() + 1) +
+          "-" + pad(d.getDate()) +
+          "T" + pad(d.getHours()) +
+          ":" + pad(d.getMinutes())
+        );
+      }
+
+      function getId(doc) {
+        return doc?._id || doc?.id;
+      }
+
+      function escapeHtml(str) {
+        return String(str ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      function setEditMode(id, a) {
+        editId = id;
+        formTitle.textContent = "Randevu Düzenle";
+        saveBtn.textContent = "Güncelle";
+        cancelEditBtn.style.display = "inline-block";
+        editingHint.style.display = "block";
+        editingHint.textContent = `Düzenlenen randevu ID: ${id}`;
+
+        nameEl.value = a.customerName || "";
+        serviceEl.value = a.service || "Saç Kesim";
+        dtEl.value = toDatetimeLocalValue(a.datetime);
+
+        clearMsg();
+        nameEl.focus();
+      }
+
+      function clearEditMode() {
+        editId = null;
+        formTitle.textContent = "Yeni Randevu";
+        saveBtn.textContent = "Randevu Oluştur";
+        cancelEditBtn.style.display = "none";
+        editingHint.style.display = "none";
+        editingHint.textContent = "";
+
+        nameEl.value = "";
+        serviceEl.value = "Saç Kesim";
+        dtEl.value = "";
+
+        clearMsg();
+      }
+
+      async function fetchAppointments() {
+        listWrap.innerHTML = "Yükleniyor...";
+        try {
+          const res = await fetch("/appointments");
+          const data = await res.json();
+
+          if (!Array.isArray(data) || data.length === 0) {
+            listWrap.innerHTML = "<p class='muted'>Henüz randevu yok.</p>";
+            return;
+          }
+
+          const rows = data.map((a) => {
+            const id = getId(a);
+            const when = fmtLocal(a.datetime);
+            const json = encodeURIComponent(JSON.stringify(a));
+            return `<tr>
+              <td>${when}</td>
+              <td>${escapeHtml(a.customerName)}</td>
+              <td>${escapeHtml(a.service)}</td>
+              <td class="muted">${id}</td>
+              <td>
+                <div class="actions">
+                  <button class="primary" data-edit="${id}" data-a="${json}">Düzenle</button>
+                  <button class="danger" data-del="${id}">Sil</button>
+                </div>
+              </td>
+            </tr>`;
+          }).join("");
+
+          listWrap.innerHTML = `
+            <table>
+              <thead>
+                <tr>
+                  <th>Tarih/Saat</th>
+                  <th>Müşteri</th>
+                  <th>Hizmet</th>
+                  <th>ID</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          `;
+        } catch (e) {
+          listWrap.innerHTML = "<p class='error'>Liste yüklenemedi.</p>";
+        }
+      }
+
+      async function createOrUpdate() {
+        const customerName = nameEl.value.trim();
+        const service = serviceEl.value;
+        const dtLocal = dtEl.value; // YYYY-MM-DDTHH:mm
+
+        if (!customerName) return showMsg("Ad Soyad zorunlu.", "error");
+        if (!dtLocal) return showMsg("Tarih & saat seçmelisin.", "error");
+
+        // datetime-local -> ISO
+        const datetime = new Date(dtLocal).toISOString();
+
+        const isEdit = Boolean(editId);
+        const url = isEdit ? `/appointments/${editId}` : "/appointments";
+        const method = isEdit ? "PUT" : "POST";
+
+        try {
+          const res = await fetch(url, {
+            method,
+            headers: { "Content-Type": "application/json; charset=utf-8" },
+            body: JSON.stringify({ customerName, service, datetime }),
+          });
+
+          const data = await res.json().catch(() => ({}));
+
+          if (!res.ok) {
+            showMsg(data?.error || "İşlem başarısız.", "error");
+            return;
+          }
+
+          showMsg(isEdit ? "Randevu güncellendi ✅" : "Randevu oluşturuldu ✅", "ok");
+          await fetchAppointments();
+          clearEditMode();
+        } catch (e) {
+          showMsg("Sunucuya bağlanılamadı.", "error");
+        }
+      }
+
+      async function deleteAppointment(id) {
+        const ok = confirm("Randevuyu silmek istiyor musun?");
+        if (!ok) return;
+
+        try {
+          const res = await fetch(`/appointments/${id}`, { method: "DELETE" });
+          const data = await res.json().catch(() => ({}));
+
+          if (!res.ok) {
+            showMsg(data?.error || "Silme başarısız.", "error");
+            return;
+          }
+
+          showMsg("Randevu silindi ✅", "ok");
+          await fetchAppointments();
+          if (editId === id) clearEditMode();
+        } catch (e) {
+          showMsg("Sunucuya bağlanılamadı.", "error");
+        }
+      }
+
+      // Event delegation: butonlara tek listener
+      listWrap.addEventListener("click", (e) => {
+        const delBtn = e.target.closest("button[data-del]");
+        if (delBtn) return deleteAppointment(delBtn.dataset.del);
+
+        const editBtn = e.target.closest("button[data-edit]");
+        if (editBtn) {
+          const id = editBtn.dataset.edit;
+          const a = JSON.parse(decodeURIComponent(editBtn.dataset.a));
+          return setEditMode(id, a);
+        }
+      });
+
+      saveBtn.addEventListener("click", createOrUpdate);
+      cancelEditBtn.addEventListener("click", clearEditMode);
+      document.getElementById("refreshBtn").addEventListener("click", fetchAppointments);
+
+      fetchAppointments();
+    </script>
+  </body>
+</html>
