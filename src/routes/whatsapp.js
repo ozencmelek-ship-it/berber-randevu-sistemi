@@ -21,6 +21,8 @@ router.get("/webhook", (req, res) => {
 });
 
 router.post("/webhook", (req, res) => {
+  console.log("INCOMING WA POST ✅");
+  console.log(JSON.stringify(req.body).slice(0, 500));
   return res.sendStatus(200);
 });
 
