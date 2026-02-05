@@ -3,16 +3,15 @@ const mongoose = require("mongoose");
 const WaSessionSchema = new mongoose.Schema(
   {
     barberId: { type: String, required: true, index: true },
-    phone: { type: String, required: true },
+    phone: { type: String, required: true, index: true },
 
-    state: {
-      type: String,
-      enum: ["MENU", "CHOOSE_SERVICE", "CHOOSE_DATE", "CHOOSE_TIME", "CONFIRM", "CANCEL"],
-      default: "MENU"
-    },
+    state: { type: String, default: "MENU" },
 
-    temp: { type: Object, default: {} },
-    lastInteractionAt: { type: Date, default: Date.now }
+    // ✅ Akış boyunca tutulan geçici bilgiler:
+    // serviceId, serviceName, dateYMD, lastSlots, chosenISO ...
+    temp: { type: mongoose.Schema.Types.Mixed, default: {} },
+
+    lastInteractionAt: { type: Date, default: Date.now },
   },
   { timestamps: true }
 );

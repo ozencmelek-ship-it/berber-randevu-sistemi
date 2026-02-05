@@ -93,7 +93,6 @@ function formatDE(dateObj) {
 }
 
 function makeCancelCode() {
-  // kısa ama yeterli: 6 haneli
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
@@ -178,7 +177,7 @@ router.post("/webhook", async (req, res) => {
         serviceId: String(selected._id),
         serviceName: selected.name,
         durationMin: selected.durationMin,
-        price: selected.price
+        price: selected.price,
       };
       await session.save();
 
@@ -208,28 +207,28 @@ router.post("/webhook", async (req, res) => {
 
       // slot üret
       const durationMin = Number(session.temp.durationMin || 30);
+
       const allSlots = generateStartSlots({
         dateYMD,
         startHHMM: "09:00",
         endHHMM: "19:00",
         stepMin: 15,
-        durationMin
+        durationMin,
       });
 
-      // o gün dolu olanları DB'den çek (confirmed)
+      // o gün dolu olanları çek
       const dayStart = new Date(dateYMD + "T00:00:00");
       const dayEnd = new Date(dateYMD + "T23:59:59");
 
       const taken = await Appointment.find({
         barberId,
         status: "confirmed",
-        datetime: { $gte: dayStart, $lte: dayEnd }
+        datetime: { $gte: dayStart, $lte: dayEnd },
       }).select("datetime");
 
-      const takenSet = new Set(taken.map(a => new Date(a.datetime).getTime()));
+      const takenSet = new Set(taken.map((a) => new Date(a.datetime).getTime()));
 
-      // uygun slotlar: başlangıç dakikası dolu değilse
-      const available = allSlots.filter(s => !takenSet.has(s.startAt.getTime())).slice(0, 12);
+      const available = allSlots.filter((s) => !takenSet.has(s.startAt.getTime())).slice(0, 12);
 
       if (!available.length) {
         session.state = "CHOOSE_DATE";
@@ -237,42 +236,59 @@ router.post("/webhook", async (req, res) => {
         await sendText({
           to: from,
           body: `Seçtiğin tarihte boş saat yok 😕\nBaşka tarih için 1/2 seç.\n\n1) Bugün\n2) Yarın`,
-          phoneNumberId
+          phoneNumberId,
         });
         return res.sendStatus(200);
       }
 
-      // session'a slotları yaz (T1..)
-      session.temp.lastSlots = available.map(s => ({ hhmm: s.hhmm, iso: s.startAt.toISOString() }));
+      session.temp.lastSlots = available.map((s) => ({ hhmm: s.hhmm, iso: s.startAt.toISOString() }));
       await session.save();
 
       let msg = `Tarih: ${dateYMD}\nSaat seç:\n\n`;
       available.forEach((s, i) => {
         msg += `T${i + 1}) ${s.hhmm}\n`;
       });
-      msg += "\nSeçmek için T1, T2... yaz";
+      msg += "\nSeçmek için T1, T2... veya sadece 1, 2... yaz";
 
       await sendText({ to: from, body: msg, phoneNumberId });
       return res.sendStatus(200);
     }
 
-    /** ===== STATE: CHOOSE_TIME ===== */
+    /** ===== STATE: CHOOSE_TIME (FIX) ===== */
     if (session.state === "CHOOSE_TIME") {
-      const m = lower.match(/^t(\d+)$/i);
-      if (!m) {
-        await sendText({ to: from, body: "Saat seçmek için T1, T2... yaz.", phoneNumberId });
+      // ✅ "T1" veya "1" kabul et
+      let idxStr = null;
+
+      const mt = lower.match(/^t(\d+)$/i);
+      if (mt) idxStr = mt[1];
+
+      if (!idxStr && /^\d+$/.test(lower)) idxStr = lower;
+
+      if (!idxStr) {
+        await sendText({
+          to: from,
+          body: "Saat seçmek için T1, T2... (veya sadece 1,2,3...) yaz.",
+          phoneNumberId,
+        });
         return res.sendStatus(200);
       }
 
-      const index = Number(m[1]) - 1;
+      const index = Number(idxStr) - 1;
       const slots = session.temp?.lastSlots || [];
 
+      console.log("CHOOSE_TIME DEBUG:", { idxStr, slotsCount: slots.length });
+
       if (index < 0 || index >= slots.length) {
-        await sendText({ to: from, body: "Geçersiz seçim. T1, T2... yaz.", phoneNumberId });
+        await sendText({
+          to: from,
+          body: "Geçersiz seçim. Listeden T1/T2... (ya da 1/2/3...) yaz.",
+          phoneNumberId,
+        });
         return res.sendStatus(200);
       }
 
       const chosen = slots[index];
+
       session.state = "CONFIRM";
       session.temp = { ...(session.temp || {}), chosenISO: chosen.iso, chosenHHMM: chosen.hhmm };
       await session.save();
@@ -303,7 +319,6 @@ router.post("/webhook", async (req, res) => {
         return res.sendStatus(200);
       }
 
-      // create appointment
       const dt = new Date(session.temp.chosenISO);
 
       try {
@@ -319,7 +334,7 @@ router.post("/webhook", async (req, res) => {
           datetime: dt,
           status: "confirmed",
           source: "whatsapp",
-          cancelCode
+          cancelCode,
         });
 
         session.state = "MENU";
@@ -334,18 +349,17 @@ router.post("/webhook", async (req, res) => {
             `Hizmet: ${created.serviceNameSnapshot}\n` +
             `İptal kodu: ${created.cancelCode}\n\n` +
             `Menü için 'menu' yaz.`,
-          phoneNumberId
+          phoneNumberId,
         });
 
         return res.sendStatus(200);
       } catch (e) {
-        // unique çakışma vs
         session.state = "CHOOSE_TIME";
         await session.save();
         await sendText({
           to: from,
-          body: "O saat az önce doldu 😅 Lütfen başka saat seç (T1, T2...).",
-          phoneNumberId
+          body: "O saat az önce doldu 😅 Lütfen başka saat seç (T1, T2... veya 1,2...).",
+          phoneNumberId,
         });
         return res.sendStatus(200);
       }
