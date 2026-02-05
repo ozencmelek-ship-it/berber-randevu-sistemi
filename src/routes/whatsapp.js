@@ -7,7 +7,6 @@ const Service = require("../models/Service");
 
 const router = express.Router();
 
-// ✅ VERIFY (Meta bunu çağırır)
 router.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
@@ -19,7 +18,6 @@ router.get("/webhook", (req, res) => {
   return res.sendStatus(403);
 });
 
-// Meta payload içinden mesajı çıkar
 function extractMessage(payload) {
   const entry = payload?.entry?.[0];
   const change = entry?.changes?.[0];
@@ -28,14 +26,13 @@ function extractMessage(payload) {
   const msg = value?.messages?.[0];
   if (!msg) return null;
 
-  const from = msg.from; // müşteri telefonu (ülke kodlu)
-  const text = msg.text?.body || ""; // text message ise
-  const phoneNumberId = value?.metadata?.phone_number_id || ""; // business phone_number_id
+  const from = msg.from;
+  const text = msg.text?.body || "";
+  const phoneNumberId = value?.metadata?.phone_number_id || "";
 
   return { from, text, phoneNumberId };
 }
 
-// Meta'ya text mesaj gönder
 async function sendText({ to, body, phoneNumberId }) {
   const token = process.env.WHATSAPP_TOKEN;
   if (!token) throw new Error("WHATSAPP_TOKEN env eksik");
@@ -45,16 +42,8 @@ async function sendText({ to, body, phoneNumberId }) {
 
   await axios.post(
     url,
-    {
-      messaging_product: "whatsapp",
-      to,
-      type: "text",
-      text: { body },
-    },
-    {
-      headers: { Authorization: `Bearer ${token}` },
-      timeout: 15000,
-    }
+    { messaging_product: "whatsapp", to, type: "text", text: { body } },
+    { headers: { Authorization: `Bearer ${token}` }, timeout: 15000 }
   );
 }
 
@@ -71,7 +60,6 @@ function menuText() {
 
 async function resolveBarberId(phoneNumberId) {
   let barberId = process.env.DEFAULT_BARBER_ID || "hamburg_001";
-
   if (phoneNumberId) {
     const b = await Barber.findOne({ whatsappPhoneNumberId: phoneNumberId });
     if (b?.barberId) barberId = b.barberId;
@@ -79,7 +67,6 @@ async function resolveBarberId(phoneNumberId) {
   return barberId;
 }
 
-// ✅ INCOMING MESSAGES
 router.post("/webhook", async (req, res) => {
   try {
     console.log("INCOMING WA POST ✅");
@@ -90,7 +77,14 @@ router.post("/webhook", async (req, res) => {
     const { from, text, phoneNumberId } = parsed;
     const barberId = await resolveBarberId(phoneNumberId);
 
-    // Session upsert
+    // Debug: WhatsApp tam ne gönderiyor görelim
+    const raw = String(text || "");
+    const normalized = raw.trim().toLowerCase();
+    const choice = (normalized.match(/^[1-3]/)?.[0]) || ""; // "1", "2", "3" yakala
+
+    console.log("WA DEBUG:", { raw, normalized, choice, from, barberId });
+
+    // session upsert
     let session = await WaSession.findOne({ barberId, phone: from });
     if (!session) {
       session = await WaSession.create({ barberId, phone: from, state: "MENU" });
@@ -99,25 +93,20 @@ router.post("/webhook", async (req, res) => {
       await session.save();
     }
 
-    const normalized = (text || "").trim().toLowerCase();
-
-    // MENU / SELAM
+    // menu/selam
     if (!normalized || normalized === "menu" || normalized === "merhaba" || normalized === "hi") {
       await sendText({ to: from, body: menuText(), phoneNumberId });
       return res.sendStatus(200);
     }
 
-    // 1) Termin buchen -> hizmet listesi
-    if (normalized === "1") {
-      const services = await Service.find({
-        barberId,
-        isActive: true,
-      }).sort({ name: 1 });
+    // 1) hizmet listesi
+    if (choice === "1") {
+      const services = await Service.find({ barberId, isActive: true }).sort({ name: 1 });
 
       if (!services.length) {
         await sendText({
           to: from,
-          body: "Şu anda tanımlı hizmet yok. (Admin panelden eklenmeli)",
+          body: "Şu anda tanımlı hizmet yok. (Compass ile services eklediğinden emin ol)",
           phoneNumberId,
         });
         return res.sendStatus(200);
@@ -129,13 +118,12 @@ router.post("/webhook", async (req, res) => {
       });
       msg += "\nSeçmek için numara yaz (1, 2, 3...)";
 
-      // Bu aşamada sadece liste gönderiyoruz (sonraki adım: seçimi session’a yazacağız)
       await sendText({ to: from, body: msg, phoneNumberId });
       return res.sendStatus(200);
     }
 
-    // Şimdilik 2/3 hazır değil → menüye yönlendir
-    if (normalized === "2" || normalized === "3") {
+    // 2/3 şimdilik yok
+    if (choice === "2" || choice === "3") {
       await sendText({
         to: from,
         body: "Bu özellik birazdan eklenecek 🙂\n\n" + menuText(),
@@ -144,7 +132,6 @@ router.post("/webhook", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    // Diğer her şey
     await sendText({ to: from, body: `Anlamadım 😅\n\n${menuText()}`, phoneNumberId });
     return res.sendStatus(200);
   } catch (e) {
