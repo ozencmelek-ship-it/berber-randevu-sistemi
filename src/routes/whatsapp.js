@@ -117,7 +117,6 @@ async function recomputeSlots({ barberId, dateYMD, durationMin }) {
   const takenSet = new Set(taken.map((a) => new Date(a.datetime).getTime()));
 
   const available = allSlots.filter((s) => !takenSet.has(s.startAt.getTime())).slice(0, 12);
-
   return available.map((s) => ({ hhmm: s.hhmm, iso: s.startAt.toISOString() }));
 }
 
@@ -136,22 +135,25 @@ function cleanCancelCode(input) {
     .replace(/[^A-Z0-9]/g, "");
 }
 
-async function listUpcomingAppointments({ barberId, phone, limit = 5 }) {
-  const now = new Date();
+/** ✅ FIX: artık sadece geleceği değil, son 30 günü + geleceği listeliyoruz */
+async function listCustomerAppointments({ barberId, phone, limit = 5 }) {
+  const fromDate = new Date();
+  fromDate.setDate(fromDate.getDate() - 30); // son 30 gün
+
   return Appointment.find({
     barberId,
     customerPhone: phone,
     status: "confirmed",
-    datetime: { $gte: now },
+    datetime: { $gte: fromDate },
   })
     .sort({ datetime: 1 })
     .limit(limit);
 }
 
 function renderAppointmentsList(appts) {
-  if (!appts.length) return "Yaklaşan randevun yok 🙂\n\nMenü için 'menu' yaz.";
+  if (!appts.length) return "Randevu bulunamadı 🙂\n\nMenü için 'menu' yaz.";
 
-  let msg = "Yaklaşan randevuların:\n\n";
+  let msg = "Randevuların:\n\n";
   appts.forEach((a, i) => {
     msg += `${i + 1}) ${formatDE(new Date(a.datetime))} — ${a.serviceNameSnapshot}\n   İptal kodu: ${a.cancelCode}\n`;
   });
@@ -214,14 +216,13 @@ router.post("/webhook", async (req, res) => {
       }
 
       if (lower === "2") {
-        const appts = await listUpcomingAppointments({ barberId, phone: from, limit: 5 });
+        const appts = await listCustomerAppointments({ barberId, phone: from, limit: 5 });
         await sendText({ to: from, body: renderAppointmentsList(appts), phoneNumberId });
         return res.sendStatus(200);
       }
 
       if (lower === "3") {
-        // Son randevuları göster + kod iste
-        const appts = await listUpcomingAppointments({ barberId, phone: from, limit: 3 });
+        const appts = await listCustomerAppointments({ barberId, phone: from, limit: 3 });
 
         session.state = "CANCEL_WAIT";
         session.temp = {
@@ -408,7 +409,7 @@ router.post("/webhook", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    /** ===== CHOOSE_TIME (HARD) ===== */
+    /** ===== CHOOSE_TIME ===== */
     if (session.state === "CHOOSE_TIME") {
       let idxStr = null;
 
