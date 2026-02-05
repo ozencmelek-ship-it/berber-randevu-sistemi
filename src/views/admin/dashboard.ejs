@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin - Randevular</title>
+  <link rel="stylesheet" href="/admin.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+  <div>
+    <h1>Randevular</h1>
+    <div class="small">Filtre seç: Bugün / Yarın / 7 Gün</div>
+  </div>
+
+  <div class="actions">
+    <a class="linkbtn" href="/admin?filter=today" style="<%= (filter==='today' || !filter) ? 'opacity:1;border-color:#5b7caa;' : 'opacity:.8' %>">Bugün</a>
+    <a class="linkbtn" href="/admin?filter=tomorrow" style="<%= filter==='tomorrow' ? 'opacity:1;border-color:#5b7caa;' : 'opacity:.8' %>">Yarın</a>
+    <a class="linkbtn" href="/admin?filter=week" style="<%= filter==='week' ? 'opacity:1;border-color:#5b7caa;' : 'opacity:.8' %>">7 Gün</a>
+
+    <a class="linkbtn" href="/admin/services">Hizmetler</a>
+    <form method="POST" action="/admin/logout">
+      <button class="danger" type="submit">Çıkış</button>
+    </form>
+  </div>
+</div>
+
+
+    <div class="card">
+      <% if (!appointments || appointments.length === 0) { %>
+        <p>Randevu yok.</p>
+      <% } else { %>
+        <table>
+          <thead>
+            <tr>
+              <th>Tarih/Saat</th>
+              <th>Hizmet</th>
+              <th>Müşteri Tel</th>
+              <th>Durum</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <% appointments.forEach(a => { %>
+              <tr>
+                <td><%= new Date(a.datetime).toLocaleString() %></td>
+                <td><%= a.serviceNameSnapshot || "-" %></td>
+                <td><%= a.customerPhone || "-" %></td>
+                <td>
+                  <% if (a.status === "confirmed") { %>
+                    <span class="badge ok">confirmed</span>
+                  <% } else { %>
+                    <span class="badge bad"><%= a.status %></span>
+                  <% } %>
+                </td>
+                <td>
+                  <% if (a.status === "confirmed") { %>
+                    <form method="POST" action="/admin/appointments/<%= a._id %>/cancel">
+                      <button class="danger" type="submit">İptal</button>
+                    </form>
+                  <% } %>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      <% } %>
+    </div>
+  </div>
+</body>
+</html>

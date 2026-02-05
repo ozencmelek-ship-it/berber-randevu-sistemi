@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin - Hizmetler</title>
+  <link rel="stylesheet" href="/admin.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div>
+        <h1>Hizmetler</h1>
+        <div class="small">WhatsApp menüsünde görünen hizmetler</div>
+      </div>
+
+      <div class="actions">
+        <a class="linkbtn" href="/admin">Randevular</a>
+        <form method="POST" action="/admin/logout">
+          <button class="danger" type="submit">Çıkış</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Yeni Hizmet Ekle</h2>
+      <form method="POST" action="/admin/services" class="grid">
+        <input name="name" placeholder="Örn: Saç Kesim" required />
+        <input name="durationMin" type="number" min="5" step="5" placeholder="Süre (dk)" required />
+        <input name="price" type="number" min="0" step="1" placeholder="Fiyat (€)" required />
+        <button type="submit">Ekle</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Mevcut Hizmetler</h2>
+
+      <% if (!services || services.length === 0) { %>
+        <p>Henüz hizmet yok.</p>
+      <% } else { %>
+        <table>
+          <thead>
+            <tr>
+              <th>Ad</th>
+              <th>Süre</th>
+              <th>Fiyat</th>
+              <th>Aktif</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <% services.forEach(s => { %>
+              <tr>
+                <td><%= s.name %></td>
+                <td><%= s.durationMin %> dk</td>
+                <td><%= s.price %> €</td>
+                <td><%= s.isActive ? "Evet" : "Hayır" %></td>
+                <td class="rowactions">
+                  <form method="POST" action="/admin/services/<%= s._id %>/toggle">
+                    <button type="submit"><%= s.isActive ? "Pasif Yap" : "Aktif Yap" %></button>
+                  </form>
+                  <form method="POST" action="/admin/services/<%= s._id %>/delete">
+                    <button class="danger" type="submit">Sil</button>
+                  </form>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      <% } %>
+    </div>
+  </div>
+</body>
+</html>

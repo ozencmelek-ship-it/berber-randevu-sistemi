@@ -1,0 +1,88 @@
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+  background: #0b0f14;
+  color: #e7eef7;
+}
+
+.wrap { max-width: 980px; margin: 40px auto; padding: 0 16px; }
+
+.card {
+  background: #121a24;
+  border: 1px solid #1f2a3a;
+  border-radius: 14px;
+  padding: 18px;
+  margin-bottom: 16px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.25);
+}
+
+h1, h2 { margin: 0 0 12px; }
+p { margin: 6px 0 12px; opacity: .9; }
+
+label { display: block; margin-top: 10px; margin-bottom: 6px; opacity: .9; }
+
+input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #2b3a52;
+  background: #0c131d;
+  color: #e7eef7;
+  outline: none;
+}
+
+input:focus { border-color: #5b7caa; }
+
+button, .linkbtn {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #2b3a52;
+  background: #1a2636;
+  color: #e7eef7;
+  cursor: pointer;
+}
+
+button:hover, .linkbtn:hover { opacity: .92; }
+
+.danger { background: #3a1a1a; border-color: #6a2a2a; }
+
+.error {
+  background: #3a1a1a;
+  border: 1px solid #6a2a2a;
+  padding: 10px;
+  border-radius: 10px;
+  margin: 12px 0;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+table { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 12px; }
+th, td { border-bottom: 1px solid #233149; padding: 10px; text-align: left; vertical-align: top; }
+th { opacity: .9; }
+tr:hover td { background: rgba(255,255,255,.02); }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.rowactions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+a.linkbtn { text-decoration: none; display: inline-block; }
+.small { font-size: 12px; opacity: .75; }
+.badge { display:inline-block; padding:3px 8px; border-radius:999px; border:1px solid #2b3a52; opacity:.9; }
+.badge.ok { border-color:#3b6a3b; }
+.badge.bad { border-color:#6a2a2a; }

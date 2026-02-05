@@ -1,81 +1,82 @@
-﻿const express = require("express");
+﻿require("dotenv").config();
+
+const path = require("path");
+const express = require("express");
+const mongoose = require("mongoose");
 const session = require("express-session");
-require("dotenv").config();
-
-const { connectDB } = require("./src/db");
-const { tenant } = require("./src/middleware/tenant");
-
-const servicesRoutes = require("./src/routes/services");
-const whatsappRoutes = require("./src/routes/whatsapp");
-
-const Barber = require("./src/models/Barber");
 
 const app = express();
 
-app.use(express.json());
+const PORT = Number(process.env.PORT || 3000);
+const MONGODB_URI = process.env.MONGODB_URI;
+
+if (!MONGODB_URI) {
+  console.error("❌ MONGODB_URI .env içinde yok!");
+  process.exit(1);
+}
+
+// ===== Body parsers
+app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// SESSION
+// ===== Session (admin login için)
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || "dev_secret",
+    secret: process.env.SESSION_SECRET || "super_secret",
     resave: false,
     saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: false, // local için
+      maxAge: 1000 * 60 * 60 * 24 * 7,
+    },
   })
 );
 
-// TENANT
-app.use(tenant);
+// ===== View engine + static
+app.set("view engine", "ejs");
+app.set("views", path.join(__dirname, "src", "views"));
+app.use(express.static(path.join(__dirname, "public")));
 
-// 🔥 GLOBAL REQUEST LOGGER (EN ÖNEMLİ EKLEDİĞİMİZ KISIM)
-app.use((req, res, next) => {
-  console.log("REQ ✅", req.method, req.url);
+// ===== Basit endpointler
+app.get("/", (req, res) => res.send("Berber Randevu Sistemi Çalışıyor ✂️"));
+app.get("/health", (req, res) =>
+  res.json({ ok: true, mongo: mongoose.connection.readyState, time: new Date().toISOString() })
+);
+
+// ===== Admin routes import + mount (EN KRİTİK)
+const adminRoutes = require("./src/routes/admin");
+
+// admin’e gelen istekleri logla (debug)
+app.use("/admin", (req, _res, next) => {
+  console.log("ADMIN HIT:", req.method, req.originalUrl);
   next();
 });
 
-// HEALTH TEST
-app.get("/health", (req, res) => {
-  res.json({ ok: true, barberId: req.barberId });
-});
+// ✅ Mount
+app.use("/admin", adminRoutes);
 
-// ROUTES
-app.use("/services", servicesRoutes);
+// ===== WhatsApp routes import + mount
+const whatsappRoutes = require("./src/routes/whatsapp");
 app.use("/whatsapp", whatsappRoutes);
 
-// STATIC (privacy/terms için)
-app.use(express.static("public"));
+// ===== 404 fallback (debug için)
+app.use((req, res) => {
+  res.status(404).send(`Cannot ${req.method} ${req.path}`);
+});
 
-// DEFAULT BARBER
-async function ensureDefaultBarber() {
-  const barberId = process.env.DEFAULT_BARBER_ID || "hamburg_001";
-
-  const exists = await Barber.findOne({ barberId });
-
-  if (!exists) {
-    await Barber.create({
-      barberId,
-      name: "Demo Barber",
-      city: "Hamburg",
-    });
-
-    console.log("Default barber created:", barberId);
-  }
-}
-
-// START
+// ===== Start
 async function start() {
   try {
-    await connectDB(process.env.MONGODB_URI);
+    await mongoose.connect(MONGODB_URI);
+    console.log("MongoDB bağlandı ✅");
 
-    await ensureDefaultBarber();
-
-    const port = Number(process.env.PORT || 3000);
-
-    app.listen(port, () =>
-      console.log("Server running on port:", port)
-    );
-  } catch (e) {
-    console.error("Startup error:", e);
+    app.listen(PORT, () => {
+      console.log(`Server ${PORT} portunda çalışıyor ✅`);
+      console.log(`Admin login: http://localhost:${PORT}/admin/login`);
+    });
+  } catch (err) {
+    console.error("Başlatma hatası:", err?.message || err);
     process.exit(1);
   }
 }
