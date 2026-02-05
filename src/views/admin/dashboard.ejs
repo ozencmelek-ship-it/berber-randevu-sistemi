@@ -18,6 +18,20 @@
     <a class="linkbtn" href="/admin?filter=today" style="<%= (filter==='today' || !filter) ? 'opacity:1;border-color:#5b7caa;' : 'opacity:.8' %>">Bugün</a>
     <a class="linkbtn" href="/admin?filter=tomorrow" style="<%= filter==='tomorrow' ? 'opacity:1;border-color:#5b7caa;' : 'opacity:.8' %>">Yarın</a>
     <a class="linkbtn" href="/admin?filter=week" style="<%= filter==='week' ? 'opacity:1;border-color:#5b7caa;' : 'opacity:.8' %>">7 Gün</a>
+    
+    <form method="GET" action="/admin" style="display:flex;gap:8px;align-items:center;">
+  <input
+    name="q"
+    value="<%= q || '' %>"
+    placeholder="Telefon ara (örn: 49176...)"
+    style="width:220px;"
+  />
+  <input type="hidden" name="filter" value="<%= filter || 'today' %>" />
+  <button type="submit">Ara</button>
+  <% if (q) { %>
+    <a class="linkbtn" href="/admin?filter=<%= filter || 'today' %>">Temizle</a>
+  <% } %>
+</form>
 
     <a class="linkbtn" href="/admin/services">Hizmetler</a>
     <form method="POST" action="/admin/logout">

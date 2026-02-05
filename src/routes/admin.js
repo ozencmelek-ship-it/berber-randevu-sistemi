@@ -40,6 +40,7 @@ router.get("/", requireAdmin, async (req, res) => {
   const barberId = process.env.DEFAULT_BARBER_ID || "hamburg_001";
 
   const filter = String(req.query.filter || "today"); // today | tomorrow | week
+  const q = String(req.query.q || "").trim(); // telefon araması
 
   const start = new Date();
   start.setHours(0, 0, 0, 0);
@@ -47,26 +48,38 @@ router.get("/", requireAdmin, async (req, res) => {
   const end = new Date(start);
 
   if (filter === "tomorrow") {
-    // yarın 00:00 - yarın 23:59
     start.setDate(start.getDate() + 1);
     end.setDate(end.getDate() + 2);
   } else if (filter === "week") {
-    // bugün 00:00 - 7 gün sonrası
     end.setDate(end.getDate() + 7);
   } else {
-    // today (default): bugün 00:00 - yarın 00:00
     end.setDate(end.getDate() + 1);
   }
 
-  const appointments = await Appointment.find({
+  const query = {
     barberId,
     datetime: { $gte: start, $lt: end },
-  })
+  };
+
+  // Telefon araması (kısmi eşleşme)
+  if (q) {
+    // sadece rakamları al (49..., 0176..., vs)
+    const digits = q.replace(/\D/g, "");
+    if (digits) {
+      query.customerPhone = { $regex: digits, $options: "i" };
+    } else {
+      // rakam yoksa direkt string arama dene
+      query.customerPhone = { $regex: q, $options: "i" };
+    }
+  }
+
+  const appointments = await Appointment.find(query)
     .sort({ datetime: 1 })
     .limit(300);
 
-  res.render("admin/dashboard", { appointments, filter });
+  res.render("admin/dashboard", { appointments, filter, q });
 });
+
 
 
 // Cancel appointment
