@@ -1,4 +1,5 @@
-﻿const express = require("express");
+﻿console.log("SERVER BOOT ✅ NEW VERSION");
+const express = require("express");
 const session = require("express-session");
 require("dotenv").config();
 
