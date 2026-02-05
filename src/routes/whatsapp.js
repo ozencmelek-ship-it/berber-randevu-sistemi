@@ -3,10 +3,11 @@ const axios = require("axios");
 
 const WaSession = require("../models/WaSession");
 const Barber = require("../models/Barber");
+const Service = require("../models/Service");
 
 const router = express.Router();
 
-// Verify (GET)
+// ✅ VERIFY (Meta bunu çağırır)
 router.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
@@ -27,8 +28,8 @@ function extractMessage(payload) {
   const msg = value?.messages?.[0];
   if (!msg) return null;
 
-  const from = msg.from; // müşteri telefonu
-  const text = msg.text?.body || ""; // mesaj metni
+  const from = msg.from; // müşteri telefonu (ülke kodlu)
+  const text = msg.text?.body || ""; // text message ise
   const phoneNumberId = value?.metadata?.phone_number_id || ""; // business phone_number_id
 
   return { from, text, phoneNumberId };
@@ -60,16 +61,25 @@ async function sendText({ to, body, phoneNumberId }) {
 function menuText() {
   return (
     "Willkommen! ✂️\n" +
-    "Was möchten Sie tun?\n\n" +
+    "Was möchtest du tun?\n\n" +
     "1) Termin buchen\n" +
     "2) Meine Termine\n" +
     "3) Termin stornieren\n\n" +
-    "Cevap olarak 1, 2 veya 3 yaz.\n" +
     "Menü için 'menu' yazabilirsin."
   );
 }
 
-// Incoming messages (POST)
+async function resolveBarberId(phoneNumberId) {
+  let barberId = process.env.DEFAULT_BARBER_ID || "hamburg_001";
+
+  if (phoneNumberId) {
+    const b = await Barber.findOne({ whatsappPhoneNumberId: phoneNumberId });
+    if (b?.barberId) barberId = b.barberId;
+  }
+  return barberId;
+}
+
+// ✅ INCOMING MESSAGES
 router.post("/webhook", async (req, res) => {
   try {
     console.log("INCOMING WA POST ✅");
@@ -78,15 +88,9 @@ router.post("/webhook", async (req, res) => {
     if (!parsed) return res.sendStatus(200);
 
     const { from, text, phoneNumberId } = parsed;
+    const barberId = await resolveBarberId(phoneNumberId);
 
-    // barberId seç (şimdilik default; phoneNumberId ile eşleştirme varsa onu kullan)
-    let barberId = process.env.DEFAULT_BARBER_ID || "hamburg_001";
-    if (phoneNumberId) {
-      const b = await Barber.findOne({ whatsappPhoneNumberId: phoneNumberId });
-      if (b?.barberId) barberId = b.barberId;
-    }
-
-    // session upsert
+    // Session upsert
     let session = await WaSession.findOne({ barberId, phone: from });
     if (!session) {
       session = await WaSession.create({ barberId, phone: from, state: "MENU" });
@@ -97,17 +101,51 @@ router.post("/webhook", async (req, res) => {
 
     const normalized = (text || "").trim().toLowerCase();
 
-    let reply = "";
+    // MENU / SELAM
     if (!normalized || normalized === "menu" || normalized === "merhaba" || normalized === "hi") {
-      reply = menuText();
-    } else if (["1", "2", "3"].includes(normalized)) {
-      reply = `Seçimin: ${normalized}\n\nYakında bu seçimlerle randevu akışını başlatacağız 🙂\n\n${menuText()}`;
-    } else {
-      reply = `Anlamadım 😅\n\n${menuText()}`;
+      await sendText({ to: from, body: menuText(), phoneNumberId });
+      return res.sendStatus(200);
     }
 
-    await sendText({ to: from, body: reply, phoneNumberId });
+    // 1) Termin buchen -> hizmet listesi
+    if (normalized === "1") {
+      const services = await Service.find({
+        barberId,
+        isActive: true,
+      }).sort({ name: 1 });
 
+      if (!services.length) {
+        await sendText({
+          to: from,
+          body: "Şu anda tanımlı hizmet yok. (Admin panelden eklenmeli)",
+          phoneNumberId,
+        });
+        return res.sendStatus(200);
+      }
+
+      let msg = "Hizmet seç:\n\n";
+      services.forEach((s, i) => {
+        msg += `${i + 1}) ${s.name} — ${s.durationMin} dk — ${s.price}€\n`;
+      });
+      msg += "\nSeçmek için numara yaz (1, 2, 3...)";
+
+      // Bu aşamada sadece liste gönderiyoruz (sonraki adım: seçimi session’a yazacağız)
+      await sendText({ to: from, body: msg, phoneNumberId });
+      return res.sendStatus(200);
+    }
+
+    // Şimdilik 2/3 hazır değil → menüye yönlendir
+    if (normalized === "2" || normalized === "3") {
+      await sendText({
+        to: from,
+        body: "Bu özellik birazdan eklenecek 🙂\n\n" + menuText(),
+        phoneNumberId,
+      });
+      return res.sendStatus(200);
+    }
+
+    // Diğer her şey
+    await sendText({ to: from, body: `Anlamadım 😅\n\n${menuText()}`, phoneNumberId });
     return res.sendStatus(200);
   } catch (e) {
     console.error("WA ERROR:", e?.response?.data || e.message);
