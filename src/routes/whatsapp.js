@@ -184,7 +184,72 @@ router.post("/webhook", async (req, res) => {
         return res.sendStatus(200);
       }
 
+      if (lower === "3") {
+        session.state = "CANCEL_WAIT_CODE";
+        session.temp = {};
+        await session.save();
+
+        await sendText({
+          to: from,
+          body:
+            "İptal kodunu yaz.\n\n" +
+            "Örnek: AB12CD\n" +
+            "Menüye dönmek için: menu",
+          phoneNumberId,
+        });
+        return res.sendStatus(200);
+      }
+
+      if (lower === "2") {
+        await sendText({ to: from, body: "Listeleme (2) birazdan eklenecek 🙂\n\n" + menuText(), phoneNumberId });
+        return res.sendStatus(200);
+      }
+
       await sendText({ to: from, body: `Anlamadım 😅\n\n${menuText()}`, phoneNumberId });
+      return res.sendStatus(200);
+    }
+
+    /** ===== CANCEL_WAIT_CODE ===== */
+    if (session.state === "CANCEL_WAIT_CODE") {
+      const code = normalized.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      if (!code || code.length < 4) {
+        await sendText({ to: from, body: "Kod geçersiz. Lütfen iptal kodunu tekrar yaz (örn: AB12CD).", phoneNumberId });
+        return res.sendStatus(200);
+      }
+
+      const appt = await Appointment.findOne({
+        barberId,
+        customerPhone: from,
+        cancelCode: code,
+        status: "confirmed",
+      });
+
+      if (!appt) {
+        await sendText({
+          to: from,
+          body: "Bu koda ait aktif randevu bulunamadı. Kodu kontrol et veya 'menu' yaz.",
+          phoneNumberId,
+        });
+        return res.sendStatus(200);
+      }
+
+      appt.status = "canceled";
+      await appt.save();
+
+      session.state = "MENU";
+      session.temp = {};
+      await session.save();
+
+      await sendText({
+        to: from,
+        body:
+          "Randevu iptal edildi ✅\n\n" +
+          `Tarih/Saat: ${formatDE(new Date(appt.datetime))}\n` +
+          `Hizmet: ${appt.serviceNameSnapshot}\n\n` +
+          "Menü için 'menu' yaz.",
+        phoneNumberId,
+      });
+
       return res.sendStatus(200);
     }
 
@@ -255,9 +320,8 @@ router.post("/webhook", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    /** ===== CHOOSE_TIME (HARD FIX) ===== */
+    /** ===== CHOOSE_TIME (HARD) ===== */
     if (session.state === "CHOOSE_TIME") {
-      // ✅ "T1" veya "1" kabul et
       let idxStr = null;
 
       const mt = lower.match(/^t(\d+)$/i);
@@ -275,7 +339,6 @@ router.post("/webhook", async (req, res) => {
 
       const index = Number(idxStr) - 1;
 
-      // ✅ slotlar yoksa yeniden üret
       const dateYMD = session.temp?.dateYMD;
       const durationMin = Number(session.temp?.durationMin || 30);
 
@@ -296,8 +359,6 @@ router.post("/webhook", async (req, res) => {
         session.temp = { ...(session.temp || {}), lastSlots: slots };
         await session.save();
       }
-
-      console.log("CHOOSE_TIME DEBUG:", { idxStr, slotsCount: slots.length });
 
       if (index < 0 || index >= slots.length) {
         await sendText({
@@ -369,13 +430,13 @@ router.post("/webhook", async (req, res) => {
             `Tarih/Saat: ${formatDE(new Date(created.datetime))}\n` +
             `Hizmet: ${created.serviceNameSnapshot}\n` +
             `İptal kodu: ${created.cancelCode}\n\n` +
+            "İptal için menüden 3 seç ve kodu yaz.\n" +
             `Menü için 'menu' yaz.`,
           phoneNumberId,
         });
 
         return res.sendStatus(200);
       } catch (e) {
-        // slot doldu
         session.state = "CHOOSE_TIME";
         await session.save();
         await sendText({
