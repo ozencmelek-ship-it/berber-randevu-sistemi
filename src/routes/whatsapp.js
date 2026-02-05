@@ -84,6 +84,42 @@ router.post("/webhook", async (req, res) => {
 
     console.log("WA DEBUG:", { raw, normalized, choice, from, barberId });
 
+    // Eğer kullanıcı hizmet seçimi yaptıysa (ör: "2")
+// Bu sadece daha önce hizmet listesi gönderildiyse çalışmalı.
+// Şimdilik basit: normalized sadece rakamsa hizmet seçimi say.
+if (/^\d+$/.test(normalized) && choice !== "1" && choice !== "2" && choice !== "3") {
+  const index = Number(normalized) - 1;
+
+  const services = await Service.find({ barberId, isActive: true }).sort({ name: 1 });
+  if (!services.length) {
+    await sendText({ to: from, body: "Hizmet listesi boş görünüyor. '1' yazıp tekrar listeyi al.", phoneNumberId });
+    return res.sendStatus(200);
+  }
+
+  if (index < 0 || index >= services.length) {
+    await sendText({ to: from, body: "Geçersiz seçim. Lütfen listeden bir numara seç.", phoneNumberId });
+    return res.sendStatus(200);
+  }
+
+  const selected = services[index];
+
+  // Session'a yaz
+  session.state = "CHOOSE_DATE";
+  session.temp = { ...(session.temp || {}), serviceId: String(selected._id), serviceName: selected.name };
+  session.lastInteractionAt = new Date();
+  await session.save();
+
+  const msg =
+    `Seçtin: ${selected.name} ✅\n\n` +
+    `Tarih seç:\n` +
+    `1) Bugün\n` +
+    `2) Yarın\n\n` +
+    `Cevap: 1 veya 2`;
+
+  await sendText({ to: from, body: msg, phoneNumberId });
+  return res.sendStatus(200);
+}
+
     // session upsert
     let session = await WaSession.findOne({ barberId, phone: from });
     if (!session) {
