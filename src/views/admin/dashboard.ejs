@@ -58,7 +58,7 @@
           <tbody>
             <% appointments.forEach(a => { %>
               <tr>
-                <td><%= new Date(a.datetime).toLocaleString() %></td>
+                <td><%= new Date(a.datetime).toLocaleString("de-DE", { timeZone: "Europe/Berlin" }) %></td>
                 <td><%= a.serviceNameSnapshot || "-" %></td>
                 <td><%= a.customerPhone || "-" %></td>
                 <td>
